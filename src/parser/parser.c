@@ -1,14 +1,13 @@
 #include "syntax_tree.h"
-extern syntax_tree *parse(const char*);
+extern syntax_tree *parse(const char *);
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     syntax_tree *tree = NULL;
     const char *input = NULL;
 
     if (argc == 2) {
         input = argv[1];
-    } else if(argc >= 3) {
+    } else if (argc >= 3) {
         printf("usage: %s <cminus_file>\n", argv[0]);
         return 1;
     }

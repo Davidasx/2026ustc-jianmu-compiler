@@ -25,7 +25,7 @@ function run_tests() {
         echo "[info] Analyzing $filename"
         
         # 生成学生的 AST 文件
-        "$BUILD_DIR"/cminusfc "$testcase" > "$OUTPUT_DIR/${filename%.cminus}.ast"
+        "$BUILD_DIR"/cminusfc -emit-ast "$testcase" > "$OUTPUT_DIR/${filename%.cminus}.ast"
         
         # 比较当前文件的输出与标准输出
         if [[ ${2:-no} != "no" ]]; then
