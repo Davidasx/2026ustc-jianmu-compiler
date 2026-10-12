@@ -13,6 +13,6 @@ std::string Student::print() const {
     std::stringstream ss;
     ss << Human::print();
     ss << "I'm from " << school_ << "\n";
-    ss >> res;
+    res = ss.str();
     return res;
 }

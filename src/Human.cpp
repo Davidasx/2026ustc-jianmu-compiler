@@ -10,6 +10,6 @@ std::string Human::print() const {
     std::string res;
     std::stringstream ss;
     ss << "My name is " << name_ << " and I am " << age_ << " years old\n";
-    ss >> res;
+    res = ss.str();
     return res;
 }
