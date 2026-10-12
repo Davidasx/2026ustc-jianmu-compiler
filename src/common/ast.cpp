@@ -102,10 +102,30 @@ ASTNode *AST::transform_node_iter(syntax_tree_node *n) {
         params -> param-list | void
         param-list -> param-list , param | param
     */
-    // TODO: 1.fill in the fields of ASTFunDeclaration
-    // 1.1 flatten params
+    // 1.1 flatten params：params -> param-list | void
+    // 参数列表用左递归的形式挂在 param-list 下，顺着 children[0] 一路向左，
+    // 把每层的 param（children[2]）压栈，最后把最左边那个 param 也压进去，
+    // 出栈顺序正好是源程序里的参数顺序。
+    if (_STR_EQ(n->children[3]->children[0]->name, "param-list")) {
+      auto list_ptr = n->children[3]->children[0];
+      auto s = std::stack<syntax_tree_node *>();
+      while (list_ptr->children_num == 3) {
+        s.push(list_ptr->children[2]);
+        list_ptr = list_ptr->children[0];
+      }
+      s.push(list_ptr->children[0]);
 
-    // 1.2 compound_stmt 字段填充
+      while (!s.empty()) {
+        auto param_node =
+            static_cast<ASTParam *>(transform_node_iter(s.top()));
+        node->params.push_back(std::shared_ptr<ASTParam>(param_node));
+        s.pop();
+      }
+    }
+
+    // 1.2 compound_stmt 字段填充（产生式最后一个成分）
+    node->compound_stmt = std::shared_ptr<ASTCompoundStmt>(
+        static_cast<ASTCompoundStmt *>(transform_node_iter(n->children[5])));
 
     return node;
   } else if (_STR_EQ(n->name, "param")) {
@@ -123,19 +143,41 @@ ASTNode *AST::transform_node_iter(syntax_tree_node *n) {
     return node;
   } else if (_STR_EQ(n->name, "compound-stmt")) {
     auto node = new ASTCompoundStmt();
-    // TODO: 2.fill in the fields of ASTCompoundStmt
     /*
       文法表达式如下
       compound-stmt -> { local-declarations statement-list }
       local-declarations -> local-declarations var-declaration | empty
       statement-list -> statement-list statement | empty
     */
-    // local declarations
-    // 2.1 flatten local declarations
+    // 2.1 flatten local declarations：两颗子树都是左递归的，展平方式与 params 相同；
+    // 遇到 empty（只有一个 epsilon 孩子）时直接得到空列表。
+    auto local_ptr = n->children[1];
+    auto local_stack = std::stack<syntax_tree_node *>();
+    while (local_ptr->children_num == 2) {
+      local_stack.push(local_ptr->children[1]);
+      local_ptr = local_ptr->children[0];
+    }
+    while (!local_stack.empty()) {
+      auto local_node =
+          static_cast<ASTVarDeclaration *>(transform_node_iter(local_stack.top()));
+      node->local_declarations.push_back(
+          std::shared_ptr<ASTVarDeclaration>(local_node));
+      local_stack.pop();
+    }
 
-    // statement list
     // 2.2 flatten statement-list
-
+    auto stmt_ptr = n->children[2];
+    auto stmt_stack = std::stack<syntax_tree_node *>();
+    while (stmt_ptr->children_num == 2) {
+      stmt_stack.push(stmt_ptr->children[1]);
+      stmt_ptr = stmt_ptr->children[0];
+    }
+    while (!stmt_stack.empty()) {
+      auto stmt_node =
+          static_cast<ASTStatement *>(transform_node_iter(stmt_stack.top()));
+      node->statement_list.push_back(std::shared_ptr<ASTStatement>(stmt_node));
+      stmt_stack.pop();
+    }
     return node;
   } else if (_STR_EQ(n->name, "statement")) {
     return transform_node_iter(n->children[0]);
@@ -151,18 +193,28 @@ ASTNode *AST::transform_node_iter(syntax_tree_node *n) {
     return node;
   } else if (_STR_EQ(n->name, "selection-stmt")) {
     auto node = new ASTSelectionStmt();
-    // TODO: 5.fill in the fields of ASTSelectionStmt
     /*
       selection-stmt -> if ( expression ) statement | if ( expression )
       statement else statement ASTSelectionStmt的结构，需要填充的字段有
       expression, if_statement, else_statement
     */
     // 5.1 expresstion
+    auto expr_node =
+        static_cast<ASTExpression *>(transform_node_iter(n->children[2]));
+    node->expression = std::shared_ptr<ASTExpression>(expr_node);
 
     // 5.2 if statement
+    auto if_stmt_node =
+        static_cast<ASTStatement *>(transform_node_iter(n->children[4]));
+    node->if_statement = std::shared_ptr<ASTStatement>(if_stmt_node);
 
-    // check whether this selection statement contains
-    // 5.3 else structure
+    // 5.3 带 else 的产生式右侧有 7 个孩子（多的两个是 else 与第二个
+    // statement），不带 else 时 else_statement 保持为 nullptr
+    if (n->children_num == 7) {
+      auto else_stmt_node =
+          static_cast<ASTStatement *>(transform_node_iter(n->children[6]));
+      node->else_statement = std::shared_ptr<ASTStatement>(else_stmt_node);
+    }
 
     return node;
   } else if (_STR_EQ(n->name, "iteration-stmt")) {
@@ -242,13 +294,25 @@ ASTNode *AST::transform_node_iter(syntax_tree_node *n) {
   } else if (_STR_EQ(n->name, "additive-expression")) {
     auto node = new ASTAdditiveExpression();
     if (n->children_num == 3) {
-      // TODO: 4.fill in the fields of ASTAdditiveExpression
       /*
         文法表达式如下
-        additive-expression -> additive-expression addop term | term 
+        additive-expression -> additive-expression addop term | term
+        三项分别对应 children[0]、children[1]（addop）、children[2]
       */
-      // additive_expression, term, op
+      auto additive_node = static_cast<ASTAdditiveExpression *>(
+          transform_node_iter(n->children[0]));
+      node->additive_expression =
+          std::shared_ptr<ASTAdditiveExpression>(additive_node);
 
+      auto op_name = n->children[1]->children[0]->name;
+      if (_STR_EQ(op_name, "+"))
+        node->op = OP_PLUS;
+      else if (_STR_EQ(op_name, "-"))
+        node->op = OP_MINUS;
+
+      auto term_node =
+          static_cast<ASTTerm *>(transform_node_iter(n->children[2]));
+      node->term = std::shared_ptr<ASTTerm>(term_node);
     } else {
       auto term_node =
           static_cast<ASTTerm *>(transform_node_iter(n->children[0]));
@@ -287,19 +351,21 @@ ASTNode *AST::transform_node_iter(syntax_tree_node *n) {
       return transform_node_iter(n->children[i]);
     else {
       auto num_node = new ASTNum();
-      // TODO: 3.fill in the fields of ASTNum
       /*
         文法表达式如下
         factor -> ( expression ) | var | call | integer | float
         float -> FLOATPOINT
         integer -> INTEGER
+        走到这里说明因子是数值字面量，文字本身挂在 children[i] 的唯一孩子上
       */
       if (_STR_EQ(name, "integer")) {
         // 3.1
-
+        num_node->type = TYPE_INT;
+        num_node->i_val = std::stoi(n->children[i]->children[0]->name);
       } else if (_STR_EQ(name, "float")) {
         // 3.2
-
+        num_node->type = TYPE_FLOAT;
+        num_node->f_val = std::stof(n->children[i]->children[0]->name);
       } else {
         _AST_NODE_ERROR_
       }
