@@ -37,9 +37,7 @@ class Scope {
             }
         }
 
-        // Name not found: handled here?
         assert(false && "Name not found in scope");
-
         return nullptr;
     }
 
@@ -101,13 +99,23 @@ class CminusfBuilder : public ASTVisitor {
     virtual Value *visit(ASTTerm &) override final;
     virtual Value *visit(ASTCall &) override final;
 
+    Type *ir_type(CminusType type);
+    Value *convert(Value *value, Type *type);
+    Value *condition(Value *value);
+    void promote(Value *&left, Value *&right);
+    AllocaInst *allocate_local(Type *type);
+    Value *var_address(ASTVar &node);
+    void default_return();
+    BasicBlock *new_block(const std::string &name);
+
     std::unique_ptr<IRBuilder> builder;
     Scope scope;
     std::unique_ptr<Module> module;
 
     struct {
-        // function that is being built
         Function *func = nullptr;
-        // TODO: you should add more fields to store state
+        // Parameters and the outermost compound statement share a scope.
+        bool function_body = false;
+        unsigned block_id = 0;
     } context;
 };

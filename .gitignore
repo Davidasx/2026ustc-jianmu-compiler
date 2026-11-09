@@ -1,2 +1,9 @@
 build/
+build-asan/
 .cache/
+.ruff_cache/
+__pycache__/
+/result
+/result.ll
+/tests/1-parser/output_student*/
+/tests/2-ir-gen/autogen/eval_result

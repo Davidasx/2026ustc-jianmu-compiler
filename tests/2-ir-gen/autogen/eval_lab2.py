@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from pathlib import Path
 import subprocess
 # 17
 lv0_1 = {
@@ -110,6 +111,11 @@ suite = [
 ]
 
 
+def cleanup_case(test_path):
+    for path in (test_path, test_path + ".o", test_path + ".ll"):
+        Path(path).unlink(missing_ok=True)
+
+
 def eval():
     f = open("eval_result", 'w')
     EXE_PATH = "../../../build/cminusfc"
@@ -129,6 +135,7 @@ def eval():
             ANSWER_PATH = ANSWER_BASE_PATH + level_name + "/" + case
             score = cases[case][0]
             need_input = cases[case][1]
+            cleanup_case(TEST_PATH)
 
             COMMAND = [TEST_PATH]
 
@@ -136,12 +143,21 @@ def eval():
                 result = subprocess.run([EXE_PATH, "-o", TEST_PATH + ".ll", "-emit-llvm",
                                         TEST_PATH + ".cminus"], stderr=subprocess.PIPE, timeout=1)
             except Exception as _:
+                cleanup_case(TEST_PATH)
                 f.write('\tFail\n')
                 continue
 
             if result.returncode == 0:
-                subprocess.run(["clang", "-O0", "-w", "-no-pie", TEST_PATH +
-                               ".ll", "-o", TEST_PATH, "-L", "../../../build", "-lcminus_io"])
+                try:
+                    compile_result = subprocess.run(["clang", "-O0", "-w", "-no-pie", TEST_PATH +
+                                                     ".ll", "-o", TEST_PATH, "-L", "../../../build", "-lcminus_io"])
+                except OSError:
+                    compile_result = None
+                if compile_result is None or compile_result.returncode != 0:
+                    f.write('\tFail\n')
+                    has_bonus = False
+                    cleanup_case(TEST_PATH)
+                    continue
                 input_option = None
                 if need_input:
                     with open(ANSWER_PATH + ".in", "rb") as fin:
@@ -161,10 +177,10 @@ def eval():
                     f.write('\tFail\n')
                     has_bonus = False
                 finally:
-                    subprocess.call(
-                        ["rm", "-rf", TEST_PATH, TEST_PATH + ".o", TEST_PATH + ".ll"])
+                    cleanup_case(TEST_PATH)
 
             else:
+                cleanup_case(TEST_PATH)
                 f.write('\tFail\n')
                 has_bonus = False
 
